@@ -37,4 +37,9 @@ class GaleriRepository
     {
         $this->findById($id)->delete();
     }
+
+    public function getAllActive()
+    {
+        return Galeri::latest()->get();
+    }
 }

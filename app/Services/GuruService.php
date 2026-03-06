@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Http\Resources\GuruResource;
 use App\Models\Guru;
 use App\Repositories\GuruRepository;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class GuruService
@@ -27,7 +29,9 @@ class GuruService
         if ($foto) {
             $data['foto'] = $foto->store('guru', 'public');
         }
-        return $this->repository->create($data);
+        $guru = $this->repository->create($data);
+        $this->clearCache();
+        return $guru;
     }
 
     public function update(int $id, array $data, ?UploadedFile $foto = null): Guru
@@ -39,7 +43,9 @@ class GuruService
             }
             $data['foto'] = $foto->store('guru', 'public');
         }
-        return $this->repository->update($id, $data);
+        $guru = $this->repository->update($id, $data);
+        $this->clearCache();
+        return $guru;
     }
 
     public function delete(int $id): void
@@ -49,5 +55,19 @@ class GuruService
             Storage::disk('public')->delete($guru->foto);
         }
         $this->repository->delete($id);
+        $this->clearCache();
+    }
+
+    // ── API (Fase 4 + 5) ─────────────────────────────────────────────────
+    public function getAllForApi(): array
+    {
+        return Cache::remember('guru:all', 3600, function () {
+            return GuruResource::collection($this->repository->getAllActive())->resolve();
+        });
+    }
+
+    public function clearCache(): void
+    {
+        Cache::forget('guru:all');
     }
 }

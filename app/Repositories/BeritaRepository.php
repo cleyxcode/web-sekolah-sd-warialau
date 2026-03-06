@@ -39,4 +39,16 @@ class BeritaRepository
     {
         $this->findById($id)->delete();
     }
+
+    public function getAllPublished()
+    {
+        return Berita::where('status', 'publish')
+            ->latest('tanggal_publish')
+            ->get();
+    }
+
+    public function findPublishedById(int $id): ?Berita
+    {
+        return Berita::where('status', 'publish')->find($id);
+    }
 }

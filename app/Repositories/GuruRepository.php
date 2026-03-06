@@ -38,4 +38,9 @@ class GuruRepository
     {
         $this->findById($id)->delete();
     }
+
+    public function getAllActive()
+    {
+        return Guru::orderBy('nama')->get();
+    }
 }

@@ -11,8 +11,8 @@
 - **Stack:** Laravel 12 + Blade (Admin & Web Pengunjung) + Flutter (Mobile Android)
 - **Arsitektur:** Service Layer + Repository Pattern + Redis Caching
 - **Metode Penelitian:** RAD (Rapid Application Development)
-- **Database:** MySQL
-- **Cache:** Redis
+- **Database:** SQLite
+- **Cache:** Redis (wajib diimplementasikan di Fase ini)
 - **Admin Panel:** Custom Blade (BUKAN Filament)
 - **Mobile:** Flutter (Android only)
 - **Deployment:** Docker (VPS) — dikerjakan di tahap akhir
@@ -22,10 +22,11 @@
 ## 🚨 ATURAN UTAMA — WAJIB DIIKUTI
 
 1. **JANGAN pakai Filament**
-2. **FOKUS SEKARANG: Web Pengunjung** dengan sistem auth orang tua
-3. **Arsitektur WAJIB:** Controller → Service Layer → Repository → Model
-4. **Jangan buat fitur di luar proposal**
-5. **Gunakan Service & Repository yang sudah ada** — jangan duplikat
+2. **FOKUS SEKARANG: Fase 4 (REST API) + Fase 5 (Redis)** — dikerjakan bersamaan
+3. **Arsitektur WAJIB:** Controller → Service Layer (+ Redis) → Repository → Model
+4. **Semua endpoint API wajib pakai Redis Cache**
+5. **Jangan buat fitur di luar proposal**
+6. **Gunakan Service & Repository yang sudah ada** — jangan duplikat
 
 ---
 
@@ -35,89 +36,147 @@
 |------|-----------|--------|
 | Fase 1 | Setup & Database | ✅ SELESAI |
 | Fase 2 | Web Admin (custom Blade) | ✅ SELESAI |
-| **Fase 3** | **Web Pengunjung + Auth Orang Tua** | 🔥 SEKARANG |
-| Fase 4 | REST API untuk Flutter | ⏳ Nanti |
-| Fase 5 | Redis Caching | ⏳ Nanti |
+| Fase 3 | Web Pengunjung + Auth Orang Tua | ✅ SELESAI |
+| **Fase 4** | **REST API untuk Flutter** | 🔥 SEKARANG |
+| **Fase 5** | **Redis Caching** | 🔥 SEKARANG (digabung Fase 4) |
 | Fase 6 | Docker | ⏳ Nanti |
 
 ---
 
-## 🔥 FASE 3 — WEB PENGUNJUNG (FOKUS SEKARANG)
+## 🔥 FASE 4 + 5 — REST API & REDIS CACHING (FOKUS SEKARANG)
 
-### Alur Akses Pengunjung:
+### Endpoint yang HARUS dibuat:
+
+| Method | Endpoint | Fungsi | Redis Key | TTL |
+|--------|----------|--------|-----------|-----|
+| GET | `/api/v1/profil-sekolah` | C1 - Data profil sekolah | `profil_sekolah` | 86400 (1 hari) |
+| GET | `/api/v1/guru` | C2 - Daftar guru | `guru:all` | 3600 (1 jam) |
+| GET | `/api/v1/berita` | C3 - List berita (published) | `berita:all` | 1800 (30 menit) |
+| GET | `/api/v1/berita/{id}` | C3 - Detail berita | `berita:{id}` | 3600 (1 jam) |
+| GET | `/api/v1/galeri` | C4 - Galeri foto | `galeri:all` | 3600 (1 jam) |
+| GET | `/api/v1/info-pendaftaran/aktif` | C5 - Info pendaftaran aktif | `info_pendaftaran:aktif` | 1800 (30 menit) |
+
+### Semua endpoint:
+- ✅ **PUBLIC** — tidak perlu login/token
+- ✅ **Wajib pakai Redis Cache** di Service Layer
+- ✅ **Response format JSON standar** (lihat di bawah)
+- ✅ **Invalidasi cache** otomatis saat admin update data
+
+---
+
+## ⚡ CARA IMPLEMENTASI REDIS (WAJIB SEPERTI INI)
+
+### Alur dengan Redis:
 
 ```
-Pengunjung buka website
+Flutter kirim request GET /api/v1/guru
     ↓
-Bisa lihat semua halaman (PUBLIC):
-- Beranda, Profil Sekolah, Guru, Berita, Galeri, Info Pendaftaran
+ApiController → GuruService
     ↓
-Klik "Daftar Sekarang" / tombol isi formulir
-    ↓
-Belum login? → Redirect ke halaman LOGIN
-    ↓
-Belum punya akun? → Klik Register → Buat akun baru
-    ↓
-Setelah login → Bisa isi Formulir Pendaftaran Online
-    ↓
-Submit → Data tersimpan → Tampilkan halaman sukses
+Service cek Redis: Cache::get('guru:all')
+    ↓ Cache HIT           ↓ Cache MISS
+    ↓                     GuruRepository::getAll()
+    ↓                          ↓
+    ↓                     Ambil dari SQLite
+    ↓                          ↓
+    ↓                     Cache::put('guru:all', $data, 3600)
+    ↓←────────────────────────┘
+return JSON response ke Flutter
+```
+
+### Contoh Kode Service dengan Redis:
+
+```php
+// app/Services/GuruService.php
+use Illuminate\Support\Facades\Cache;
+
+class GuruService
+{
+    public function __construct(private GuruRepository $repo) {}
+
+    // Untuk API Flutter — dengan Redis
+    public function getAllForApi()
+    {
+        return Cache::remember('guru:all', 3600, function () {
+            return $this->repo->getAllActive();
+        });
+    }
+
+    // Invalidasi cache saat admin update
+    public function clearCache()
+    {
+        Cache::forget('guru:all');
+    }
+}
+```
+
+### Invalidasi cache di Admin Controller (WAJIB):
+
+```php
+// Setiap kali admin create/update/delete data,
+// cache harus dihapus agar data Flutter selalu fresh
+
+// Contoh di Admin\GuruController:
+public function store(GuruRequest $request)
+{
+    $this->guruService->create($request->validated());
+    $this->guruService->clearCache(); // ← WAJIB
+    return redirect()->route('admin.guru.index')
+        ->with('success', 'Data guru berhasil ditambahkan');
+}
+
+public function update(GuruRequest $request, $id)
+{
+    $this->guruService->update($id, $request->validated());
+    $this->guruService->clearCache(); // ← WAJIB
+    return redirect()->route('admin.guru.index')
+        ->with('success', 'Data guru berhasil diupdate');
+}
+
+public function destroy($id)
+{
+    $this->guruService->delete($id);
+    $this->guruService->clearCache(); // ← WAJIB
+    return redirect()->route('admin.guru.index')
+        ->with('success', 'Data guru berhasil dihapus');
+}
 ```
 
 ---
 
-## 👥 TIGA AKTOR SISTEM
+## 📡 FORMAT RESPONSE API (WAJIB KONSISTEN)
 
-### 1. Pengunjung Umum (tanpa login) — PUBLIC:
-- Lihat Beranda
-- Lihat Profil Sekolah (A1)
-- Lihat Data Guru (A2)
-- Lihat Berita & Pengumuman (A3)
-- Lihat Galeri Foto (A4)
-- Lihat Info Pendaftaran / brosur digital (A5)
-- ❌ TIDAK bisa isi formulir pendaftaran
-
-### 2. Orang Tua (wajib login) — AUTH:
-- Semua akses pengunjung umum +
-- Isi Formulir Pendaftaran Online (A6)
-- Lihat status pendaftaran anaknya (pending/diterima/ditolak)
-- Edit formulir jika masih pending
-
-### 3. Admin (login via /admin) — ADMIN:
-- Semua fitur B1-B7 (sudah selesai)
-
----
-
-## 🗄️ DATABASE — TAMBAHAN UNTUK AUTH ORANG TUA
-
-Tabel `users` sudah ada, tambahkan kolom untuk orang tua:
-
-```
-users
-- id
-- name           ← nama orang tua
-- email
-- password
-- role           ← 'admin' atau 'orangtua'
-- no_hp          ← tambahan untuk orang tua
-- remember_token
-- timestamps
+### Sukses — list data:
+```json
+{
+    "success": true,
+    "message": "Data berhasil diambil",
+    "data": [
+        { "id": 1, "nama": "...", ... },
+        { "id": 2, "nama": "...", ... }
+    ]
+}
 ```
 
-Tabel `pendaftaran` — pastikan ada relasi ke users:
+### Sukses — single data:
+```json
+{
+    "success": true,
+    "message": "Data berhasil diambil",
+    "data": {
+        "id": 1,
+        "nama": "..."
+    }
+}
 ```
-pendaftaran
-- id
-- user_id (FK→users)        ← orang tua yang mendaftar
-- info_pendaftaran_id (FK)
-- nama_anak
-- tanggal_lahir
-- jenis_kelamin
-- alamat
-- nama_ortu
-- no_hp
-- dokumen                   ← upload file (opsional)
-- status (pending/diterima/ditolak)
-- timestamps
+
+### Error — data tidak ditemukan:
+```json
+{
+    "success": false,
+    "message": "Data tidak ditemukan",
+    "data": null
+}
 ```
 
 ---
@@ -125,202 +184,216 @@ pendaftaran
 ## 🏗️ ARSITEKTUR WAJIB
 
 ```
-Request Browser
+Flutter
+    ↓ HTTP GET
+Api\Controller (app/Http/Controllers/Api/)
     ↓
-Middleware (cek auth jika halaman protected)
+Service Layer (cek Redis Cache dulu)
+    ↓ cache miss
+Repository (query SQLite)
     ↓
-Controller Web/
+Model
     ↓
-Service Layer
+Service (simpan ke Redis)
     ↓
-Repository
-    ↓
-Model → MySQL
-    ↓
-return view('web.xxx')
+Controller → return response()->json(...)
 ```
 
 ### Folder Structure:
 
 ```
-app/Http/Controllers/Web/
-├── BerandaController.php
-├── ProfilSekolahController.php
-├── GuruController.php
-├── BeritaController.php
-├── GaleriController.php
-├── InfoPendaftaranController.php
-├── PendaftaranController.php     ← protected (auth)
-└── Auth/
-    ├── LoginController.php        ← login orang tua
-    ├── RegisterController.php     ← register orang tua
-    └── LogoutController.php
+app/Http/Controllers/
+└── Api/                              ← BUAT DI SINI
+    ├── ProfilSekolahController.php
+    ├── GuruController.php
+    ├── BeritaController.php
+    ├── GaleriController.php
+    └── InfoPendaftaranController.php
 
-app/Http/Middleware/
-└── OrangtuaMiddleware.php         ← cek role = orangtua
+app/Services/                         ← UPDATE yang sudah ada, tambah Redis
+├── GuruService.php                   ← tambah getAllForApi() + clearCache()
+├── BeritaService.php                 ← tambah getAllForApi() + clearCache()
+├── GaleriService.php                 ← tambah getAllForApi() + clearCache()
+├── InfoPendaftaranService.php        ← tambah getAktifForApi() + clearCache()
+└── ProfilSekolahService.php          ← tambah getForApi() + clearCache()
 
-resources/views/web/
-├── layouts/
-│   └── app.blade.php              ← navbar + footer
-├── auth/
-│   ├── login.blade.php            ← login orang tua
-│   └── register.blade.php        ← register orang tua
-├── beranda/
-│   └── index.blade.php
-├── profil/
-│   └── index.blade.php
-├── guru/
-│   └── index.blade.php
-├── berita/
-│   ├── index.blade.php
-│   └── show.blade.php
-├── galeri/
-│   └── index.blade.php
-├── info-pendaftaran/
-│   └── index.blade.php            ← brosur digital (A5)
-└── pendaftaran/
-    ├── form.blade.php             ← isi formulir (A6) - butuh login
-    ├── sukses.blade.php           ← konfirmasi berhasil daftar
-    └── status.blade.php          ← cek status pendaftaran
+app/Http/Resources/                   ← BUAT API Resource (transform data)
+├── GuruResource.php
+├── BeritaResource.php
+├── GaleriResource.php
+├── InfoPendaftaranResource.php
+└── ProfilSekolahResource.php
 ```
 
 ---
 
-## 🔗 ROUTE WEB PENGUNJUNG
+## 🔗 ROUTE API
 
 ```php
-// routes/web.php
+// routes/api.php
 
-// ── PUBLIC (tanpa login) ──────────────────────────
-Route::name('web.')->group(function () {
-    Route::get('/', [Web\BerandaController::class, 'index'])->name('beranda');
-    Route::get('/profil', [Web\ProfilSekolahController::class, 'index'])->name('profil');
-    Route::get('/guru', [Web\GuruController::class, 'index'])->name('guru');
-    Route::get('/berita', [Web\BeritaController::class, 'index'])->name('berita');
-    Route::get('/berita/{id}', [Web\BeritaController::class, 'show'])->name('berita.show');
-    Route::get('/galeri', [Web\GaleriController::class, 'index'])->name('galeri');
-    Route::get('/info-pendaftaran', [Web\InfoPendaftaranController::class, 'index'])->name('info-pendaftaran');
-});
+Route::prefix('v1')->name('api.v1.')->group(function () {
 
-// ── AUTH ORANG TUA (guest only) ──────────────────
-Route::name('web.auth.')->prefix('akun')->middleware('guest')->group(function () {
-    Route::get('/login', [Web\Auth\LoginController::class, 'showLogin'])->name('login');
-    Route::post('/login', [Web\Auth\LoginController::class, 'login']);
-    Route::get('/register', [Web\Auth\RegisterController::class, 'showRegister'])->name('register');
-    Route::post('/register', [Web\Auth\RegisterController::class, 'register']);
-});
+    // C1 - Profil Sekolah
+    Route::get('/profil-sekolah', [Api\ProfilSekolahController::class, 'index']);
 
-// ── PROTECTED (wajib login sebagai orangtua) ─────
-Route::name('web.')->middleware(['auth', 'orangtua'])->group(function () {
-    Route::post('/akun/logout', [Web\Auth\LogoutController::class, 'logout'])->name('auth.logout');
-    Route::get('/pendaftaran', [Web\PendaftaranController::class, 'form'])->name('pendaftaran.form');
-    Route::post('/pendaftaran', [Web\PendaftaranController::class, 'store'])->name('pendaftaran.store');
-    Route::get('/pendaftaran/status', [Web\PendaftaranController::class, 'status'])->name('pendaftaran.status');
+    // C2 - Guru
+    Route::get('/guru', [Api\GuruController::class, 'index']);
+
+    // C3 - Berita
+    Route::get('/berita', [Api\BeritaController::class, 'index']);
+    Route::get('/berita/{id}', [Api\BeritaController::class, 'show']);
+
+    // C4 - Galeri
+    Route::get('/galeri', [Api\GaleriController::class, 'index']);
+
+    // C5 - Info Pendaftaran
+    Route::get('/info-pendaftaran/aktif', [Api\InfoPendaftaranController::class, 'aktif']);
+
 });
 ```
 
 ---
 
-## 🎨 DESAIN WEB PENGUNJUNG
+## 🔧 KONFIGURASI REDIS
 
-Sesuai mockup Gambar 3.11 proposal:
-- **Warna:** Kuning `#FFC107` + Biru Navy `#1E3A5F`
-- **CSS:** Tailwind CSS
-- **Responsive:** Mobile-friendly
-
-### Navbar:
+```env
+# .env
+CACHE_DRIVER=redis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
 ```
-[Logo SD Warialau]  Beranda | Profil | Guru | Berita | Galeri | Pendaftaran
-                                                    [Login] atau [Nama Orang Tua ▼]
-```
-
-### Tombol Daftar di halaman Info Pendaftaran:
-```
-[Daftar Sekarang]
-→ Jika belum login: redirect ke /akun/login
-→ Jika sudah login sebagai orangtua: redirect ke /pendaftaran
-```
-
-### Halaman Login Orang Tua:
-- Form: Email + Password
-- Link: "Belum punya akun? Daftar di sini"
-- Tombol: "Masuk"
-- Setelah login → redirect ke /pendaftaran
-
-### Halaman Register Orang Tua:
-- Form: Nama Lengkap, Email, No. HP, Password, Konfirmasi Password
-- Role otomatis = 'orangtua'
-- Setelah register → auto login → redirect ke /pendaftaran
-
----
-
-## 🔒 MIDDLEWARE ORANG TUA
 
 ```php
-// app/Http/Middleware/OrangtuaMiddleware.php
-public function handle(Request $request, Closure $next)
+// config/cache.php — pastikan default = redis
+'default' => env('CACHE_DRIVER', 'redis'),
+```
+
+---
+
+## 📋 DETAIL SETIAP ENDPOINT
+
+### GET /api/v1/profil-sekolah
+```json
 {
-    if (auth()->check() && auth()->user()->role === 'orangtua') {
-        return $next($request);
+    "success": true,
+    "message": "Data berhasil diambil",
+    "data": {
+        "nama_sekolah": "SD Negeri Warialau",
+        "visi": "...",
+        "misi": "...",
+        "sejarah": "...",
+        "alamat": "...",
+        "kontak": "...",
+        "logo": "http://..."
     }
+}
+```
 
-    // Jika admin coba akses halaman orang tua
-    if (auth()->check() && auth()->user()->role === 'admin') {
-        return redirect()->route('admin.dashboard');
+### GET /api/v1/guru
+```json
+{
+    "success": true,
+    "message": "Data berhasil diambil",
+    "data": [
+        {
+            "id": 1,
+            "nama": "...",
+            "nip": "...",
+            "jabatan": "...",
+            "mata_pelajaran": "...",
+            "foto": "http://..."
+        }
+    ]
+}
+```
+
+### GET /api/v1/berita
+```json
+{
+    "success": true,
+    "message": "Data berhasil diambil",
+    "data": [
+        {
+            "id": 1,
+            "judul": "...",
+            "ringkasan": "...",
+            "gambar": "http://...",
+            "kategori": "...",
+            "tanggal_publish": "2026-01-01"
+        }
+    ]
+}
+```
+
+### GET /api/v1/info-pendaftaran/aktif
+```json
+{
+    "success": true,
+    "message": "Data berhasil diambil",
+    "data": {
+        "id": 1,
+        "tahun_ajaran": "2026/2027",
+        "tanggal_buka": "2026-01-01",
+        "tanggal_tutup": "2026-02-01",
+        "kuota": 60,
+        "syarat": "...",
+        "status": "aktif"
     }
-
-    return redirect()->route('web.auth.login');
 }
 ```
 
 ---
 
-## 📋 DETAIL HALAMAN
-
-### Beranda (/)
-- Hero: nama sekolah + tagline + foto
-- Statistik: jumlah guru, siswa, tahun berdiri
-- 3 berita terbaru
-- 6 foto galeri terbaru
-- Banner info pendaftaran (jika ada yang aktif)
-
-### Info Pendaftaran (/info-pendaftaran) — A5
-- Tampilan seperti brosur digital
-- Tahun ajaran, tanggal buka-tutup, kuota tersisa
-- Syarat-syarat pendaftaran
-- Tombol **"Daftar Sekarang"** → cek login
-
-### Formulir Pendaftaran (/pendaftaran) — A6 (WAJIB LOGIN)
-- Nama anak, tanggal lahir, jenis kelamin, alamat
-- Nama orang tua, no HP (auto-fill dari akun)
-- Upload dokumen (opsional)
-- Tombol Submit
-- Redirect ke halaman sukses setelah berhasil
-
-### Status Pendaftaran (/pendaftaran/status) — (WAJIB LOGIN)
-- Tampilkan status pendaftaran orang tua yang login
-- Status: Pending (kuning) / Diterima (hijau) / Ditolak (merah)
-- Detail data yang sudah didaftarkan
-
----
-
 ## ❌ YANG DILARANG
 
-- ❌ Orang tua bisa akses halaman admin
-- ❌ Admin bisa akses halaman formulir orang tua
-- ❌ Pengunjung tanpa login bisa isi formulir pendaftaran
-- ❌ Fitur di luar proposal (nilai, absensi, SPP, chat)
+- ❌ Endpoint API tanpa Redis Cache
 - ❌ Query langsung di Controller
 - ❌ Logic bisnis di Controller
+- ❌ Endpoint yang butuh login (semua API public)
+- ❌ Fitur di luar proposal
+- ❌ Duplikat Service/Repository
 
 ---
 
 ## 📦 PACKAGE
 
 ```bash
-# Sudah ada dari Fase 1:
-composer require laravel/sanctum
+# Pastikan sudah terinstall:
 composer require predis/predis
+
+# Cek Redis aktif:
+redis-cli ping
+# Output: PONG ✅
+```
+
+---
+
+## 🧪 CARA TEST API
+
+Setelah selesai, test dengan curl:
+
+```bash
+# Test profil sekolah
+curl http://localhost/api/v1/profil-sekolah
+
+# Test guru
+curl http://localhost/api/v1/guru
+
+# Test berita
+curl http://localhost/api/v1/berita
+
+# Test galeri
+curl http://localhost/api/v1/galeri
+
+# Test info pendaftaran aktif
+curl http://localhost/api/v1/info-pendaftaran/aktif
+```
+
+Atau test via MCP server app di Claude Code:
+```
+test semua endpoint API dan pastikan Redis cache berjalan
 ```
 
 ---
@@ -328,8 +401,7 @@ composer require predis/predis
 ## 📌 CATATAN
 
 - Project: `~/project-laravel/we-sd-warialau`
-- Redis aktif di port 6379
+- Redis aktif di port 6379 (sudah diverifikasi PONG)
+- Database: SQLite
 - Reset DB: `php artisan migrate:fresh --seed`
-- Seeder: 1 admin + 1 akun orang tua contoh
-- Admin login di: `/admin/login`
-- Orang tua login di: `/akun/login`
+- Setelah API selesai → lanjut Fase 6 Docker

@@ -36,4 +36,12 @@ class InfoPendaftaranRepository
     {
         $this->findById($id)->delete();
     }
+
+    public function getAktif(): ?InfoPendaftaran
+    {
+        return InfoPendaftaran::where('status', 'aktif')
+            ->where('tanggal_tutup', '>=', now())
+            ->latest()
+            ->first();
+    }
 }
