@@ -18,6 +18,14 @@ class DatabaseSeeder extends Seeder
             'role'     => 'admin',
         ]);
 
+        User::create([
+            'name'     => 'Orang Tua Contoh',
+            'email'    => 'orangtua@warialau.sch.id',
+            'password' => Hash::make('password'),
+            'role'     => 'orangtua',
+            'no_hp'    => '081234567890',
+        ]);
+
         ProfilSekolah::create([
             'nama_sekolah' => 'SD Negeri Warialau',
             'visi'         => 'Menjadi sekolah dasar yang unggul, berkarakter, dan berwawasan lingkungan.',

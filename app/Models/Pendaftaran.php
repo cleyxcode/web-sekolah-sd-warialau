@@ -10,6 +10,7 @@ class Pendaftaran extends Model
 
     protected $fillable = [
         'info_pendaftaran_id',
+        'user_id',
         'nama_anak',
         'tanggal_lahir',
         'jenis_kelamin',
@@ -27,5 +28,10 @@ class Pendaftaran extends Model
     public function infoPendaftaran()
     {
         return $this->belongsTo(InfoPendaftaran::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

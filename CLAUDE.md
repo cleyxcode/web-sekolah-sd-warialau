@@ -11,7 +11,7 @@
 - **Stack:** Laravel 12 + Blade (Admin & Web Pengunjung) + Flutter (Mobile Android)
 - **Arsitektur:** Service Layer + Repository Pattern + Redis Caching
 - **Metode Penelitian:** RAD (Rapid Application Development)
-- **Database:** sqlite
+- **Database:** MySQL
 - **Cache:** Redis
 - **Admin Panel:** Custom Blade (BUKAN Filament)
 - **Mobile:** Flutter (Android only)
@@ -21,327 +21,306 @@
 
 ## 🚨 ATURAN UTAMA — WAJIB DIIKUTI
 
-1. **JANGAN pakai Filament** — Admin panel dibuat custom dengan Blade + Tailwind CSS
-2. **FOKUS SEKARANG: Halaman Admin saja** — Web pengunjung & Flutter dikerjakan setelah admin selesai
+1. **JANGAN pakai Filament**
+2. **FOKUS SEKARANG: Web Pengunjung** dengan sistem auth orang tua
 3. **Arsitektur WAJIB:** Controller → Service Layer → Repository → Model
-4. **Jangan buat fitur di luar proposal** (nilai, absensi, SPP, chat, dll)
-5. **Nama variabel domain** pakai Bahasa Indonesia (siswa, guru, berita, dll)
+4. **Jangan buat fitur di luar proposal**
+5. **Gunakan Service & Repository yang sudah ada** — jangan duplikat
 
 ---
 
-## 🗓️ URUTAN PENGERJAAN
+## ✅ STATUS PENGERJAAN
 
-### ✅ SEKARANG DIKERJAKAN — FASE 2: WEB ADMIN (Custom Blade)
-
-#### Setup Awal:
-- [ ] Install Laravel Sanctum
-- [ ] Buat semua migration sesuai ERD
-- [ ] Buat semua Model + relasi
-- [ ] Buat Seeder: 1 akun admin default
-- [ ] Setup layout admin (sidebar, navbar, Tailwind CSS)
-
-#### Halaman Admin:
-- [ ] Login Admin (B0)
-- [ ] Dashboard (statistik: total guru, siswa, berita, pendaftaran)
-- [ ] Kelola Profil Sekolah (B1)
-- [ ] Kelola Data Guru — CRUD (B2)
-- [ ] Kelola Data Siswa — CRUD (B3)
-- [ ] Kelola Berita & Pengumuman — CRUD (B4)
-- [ ] Kelola Galeri Foto — CRUD (B5)
-- [ ] Kelola Info Pendaftaran (B6)
-- [ ] Kelola Data Formulir Pendaftaran Masuk (B7)
-- [ ] Logout
+| Fase | Keterangan | Status |
+|------|-----------|--------|
+| Fase 1 | Setup & Database | ✅ SELESAI |
+| Fase 2 | Web Admin (custom Blade) | ✅ SELESAI |
+| **Fase 3** | **Web Pengunjung + Auth Orang Tua** | 🔥 SEKARANG |
+| Fase 4 | REST API untuk Flutter | ⏳ Nanti |
+| Fase 5 | Redis Caching | ⏳ Nanti |
+| Fase 6 | Docker | ⏳ Nanti |
 
 ---
 
-### ⏳ DIKERJAKAN SETELAH ADMIN SELESAI
+## 🔥 FASE 3 — WEB PENGUNJUNG (FOKUS SEKARANG)
 
-#### FASE 3 — Web Pengunjung (Blade)
-- Beranda, Profil, Guru, Berita, Galeri, Info Pendaftaran, Formulir Online
+### Alur Akses Pengunjung:
 
-#### FASE 4 — REST API untuk Flutter
-- Endpoint publik C1-C5
-
-#### FASE 5 — Redis Caching
-- Cache data publik di Service Layer
-
-#### FASE 6 — Docker
-- Dockerfile + docker-compose.yml
+```
+Pengunjung buka website
+    ↓
+Bisa lihat semua halaman (PUBLIC):
+- Beranda, Profil Sekolah, Guru, Berita, Galeri, Info Pendaftaran
+    ↓
+Klik "Daftar Sekarang" / tombol isi formulir
+    ↓
+Belum login? → Redirect ke halaman LOGIN
+    ↓
+Belum punya akun? → Klik Register → Buat akun baru
+    ↓
+Setelah login → Bisa isi Formulir Pendaftaran Online
+    ↓
+Submit → Data tersimpan → Tampilkan halaman sukses
+```
 
 ---
 
-## 🗄️ DATABASE — SESUAI ERD PROPOSAL (Gambar 3.9)
+## 👥 TIGA AKTOR SISTEM
+
+### 1. Pengunjung Umum (tanpa login) — PUBLIC:
+- Lihat Beranda
+- Lihat Profil Sekolah (A1)
+- Lihat Data Guru (A2)
+- Lihat Berita & Pengumuman (A3)
+- Lihat Galeri Foto (A4)
+- Lihat Info Pendaftaran / brosur digital (A5)
+- ❌ TIDAK bisa isi formulir pendaftaran
+
+### 2. Orang Tua (wajib login) — AUTH:
+- Semua akses pengunjung umum +
+- Isi Formulir Pendaftaran Online (A6)
+- Lihat status pendaftaran anaknya (pending/diterima/ditolak)
+- Edit formulir jika masih pending
+
+### 3. Admin (login via /admin) — ADMIN:
+- Semua fitur B1-B7 (sudah selesai)
+
+---
+
+## 🗄️ DATABASE — TAMBAHAN UNTUK AUTH ORANG TUA
+
+Tabel `users` sudah ada, tambahkan kolom untuk orang tua:
 
 ```
 users
-- id, name, email, password, role (admin), remember_token, timestamps
+- id
+- name           ← nama orang tua
+- email
+- password
+- role           ← 'admin' atau 'orangtua'
+- no_hp          ← tambahan untuk orang tua
+- remember_token
+- timestamps
+```
 
-profil_sekolah
-- id, nama_sekolah, visi, misi, sejarah, alamat, kontak, logo, updated_at
-
-guru
-- id, nama, nip, jabatan, mata_pelajaran, foto, deleted_at, timestamps
-
-siswa
-- id, nama, nis, kelas, tahun_ajaran, foto, deleted_at, timestamps
-
-berita
-- id, user_id (FK→users), judul, isi, gambar, kategori,
-  tanggal_publish, status (draft/publish), deleted_at, timestamps
-
-galeri
-- id, user_id (FK→users), judul, foto, keterangan, deleted_at, timestamps
-
-info_pendaftaran
-- id, user_id (FK→users), tahun_ajaran, tanggal_buka, tanggal_tutup,
-  kuota, syarat, status (aktif/nonaktif), timestamps
-
+Tabel `pendaftaran` — pastikan ada relasi ke users:
+```
 pendaftaran
-- id, info_pendaftaran_id (FK), nama_anak, tanggal_lahir,
-  jenis_kelamin, alamat, nama_ortu, no_hp, dokumen,
-  status (pending/diterima/ditolak), timestamps
-
-cache
-- key, value, expiration
+- id
+- user_id (FK→users)        ← orang tua yang mendaftar
+- info_pendaftaran_id (FK)
+- nama_anak
+- tanggal_lahir
+- jenis_kelamin
+- alamat
+- nama_ortu
+- no_hp
+- dokumen                   ← upload file (opsional)
+- status (pending/diterima/ditolak)
+- timestamps
 ```
 
 ---
 
-## 🏗️ ARSITEKTUR WAJIB (Service Layer Pattern)
+## 🏗️ ARSITEKTUR WAJIB
 
 ```
-Request dari Browser
+Request Browser
     ↓
-Controller (terima & validasi — pakai Form Request)
+Middleware (cek auth jika halaman protected)
     ↓
-Service Layer (logika bisnis)
+Controller Web/
     ↓
-Repository (query database)
+Service Layer
+    ↓
+Repository
     ↓
 Model → MySQL
     ↓
-Kembali ke Controller → return view(...)
+return view('web.xxx')
 ```
 
-### Struktur Folder:
+### Folder Structure:
 
 ```
-app/
-├── Http/
-│   ├── Controllers/
-│   │   ├── Admin/            ← FOKUS SEKARANG
-│   │   │   ├── AuthController.php
-│   │   │   ├── DashboardController.php
-│   │   │   ├── ProfilSekolahController.php
-│   │   │   ├── GuruController.php
-│   │   │   ├── SiswaController.php
-│   │   │   ├── BeritaController.php
-│   │   │   ├── GaleriController.php
-│   │   │   ├── InfoPendaftaranController.php
-│   │   │   └── PendaftaranController.php
-│   │   ├── Web/              ← NANTI
-│   │   └── Api/              ← NANTI
-│   ├── Requests/
-│   │   └── Admin/
-│   │       ├── GuruRequest.php
-│   │       ├── SiswaRequest.php
-│   │       ├── BeritaRequest.php
-│   │       ├── GaleriRequest.php
-│   │       ├── InfoPendaftaranRequest.php
-│   │       └── PendaftaranRequest.php
-│   └── Middleware/
-│       └── AdminMiddleware.php
-├── Services/
-│   ├── GuruService.php
-│   ├── SiswaService.php
-│   ├── BeritaService.php
-│   ├── GaleriService.php
-│   ├── InfoPendaftaranService.php
-│   ├── PendaftaranService.php
-│   └── ProfilSekolahService.php
-├── Repositories/
-│   ├── GuruRepository.php
-│   ├── SiswaRepository.php
-│   ├── BeritaRepository.php
-│   ├── GaleriRepository.php
-│   ├── InfoPendaftaranRepository.php
-│   ├── PendaftaranRepository.php
-│   └── ProfilSekolahRepository.php
-└── Models/
-    ├── User.php
-    ├── ProfilSekolah.php
-    ├── Guru.php
-    ├── Siswa.php
-    ├── Berita.php
-    ├── Galeri.php
-    ├── InfoPendaftaran.php
-    └── Pendaftaran.php
+app/Http/Controllers/Web/
+├── BerandaController.php
+├── ProfilSekolahController.php
+├── GuruController.php
+├── BeritaController.php
+├── GaleriController.php
+├── InfoPendaftaranController.php
+├── PendaftaranController.php     ← protected (auth)
+└── Auth/
+    ├── LoginController.php        ← login orang tua
+    ├── RegisterController.php     ← register orang tua
+    └── LogoutController.php
 
-resources/views/
-├── admin/                    ← FOKUS SEKARANG
-│   ├── layouts/
-│   │   └── app.blade.php     ← Layout utama admin (sidebar + navbar)
-│   ├── auth/
-│   │   └── login.blade.php
-│   ├── dashboard/
-│   │   └── index.blade.php
-│   ├── profil-sekolah/
-│   │   └── edit.blade.php
-│   ├── guru/
-│   │   ├── index.blade.php
-│   │   ├── create.blade.php
-│   │   └── edit.blade.php
-│   ├── siswa/
-│   │   ├── index.blade.php
-│   │   ├── create.blade.php
-│   │   └── edit.blade.php
-│   ├── berita/
-│   │   ├── index.blade.php
-│   │   ├── create.blade.php
-│   │   └── edit.blade.php
-│   ├── galeri/
-│   │   ├── index.blade.php
-│   │   ├── create.blade.php
-│   │   └── edit.blade.php
-│   ├── info-pendaftaran/
-│   │   ├── index.blade.php
-│   │   ├── create.blade.php
-│   │   └── edit.blade.php
-│   └── pendaftaran/
-│       ├── index.blade.php
-│       └── show.blade.php
-└── web/                      ← NANTI
+app/Http/Middleware/
+└── OrangtuaMiddleware.php         ← cek role = orangtua
+
+resources/views/web/
+├── layouts/
+│   └── app.blade.php              ← navbar + footer
+├── auth/
+│   ├── login.blade.php            ← login orang tua
+│   └── register.blade.php        ← register orang tua
+├── beranda/
+│   └── index.blade.php
+├── profil/
+│   └── index.blade.php
+├── guru/
+│   └── index.blade.php
+├── berita/
+│   ├── index.blade.php
+│   └── show.blade.php
+├── galeri/
+│   └── index.blade.php
+├── info-pendaftaran/
+│   └── index.blade.php            ← brosur digital (A5)
+└── pendaftaran/
+    ├── form.blade.php             ← isi formulir (A6) - butuh login
+    ├── sukses.blade.php           ← konfirmasi berhasil daftar
+    └── status.blade.php          ← cek status pendaftaran
 ```
 
 ---
 
-## 🔗 ROUTE ADMIN
+## 🔗 ROUTE WEB PENGUNJUNG
 
 ```php
 // routes/web.php
 
-// Auth Admin
-Route::prefix('admin')->name('admin.')->group(function () {
+// ── PUBLIC (tanpa login) ──────────────────────────
+Route::name('web.')->group(function () {
+    Route::get('/', [Web\BerandaController::class, 'index'])->name('beranda');
+    Route::get('/profil', [Web\ProfilSekolahController::class, 'index'])->name('profil');
+    Route::get('/guru', [Web\GuruController::class, 'index'])->name('guru');
+    Route::get('/berita', [Web\BeritaController::class, 'index'])->name('berita');
+    Route::get('/berita/{id}', [Web\BeritaController::class, 'show'])->name('berita.show');
+    Route::get('/galeri', [Web\GaleriController::class, 'index'])->name('galeri');
+    Route::get('/info-pendaftaran', [Web\InfoPendaftaranController::class, 'index'])->name('info-pendaftaran');
+});
 
-    // Guest only
-    Route::middleware('guest')->group(function () {
-        Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-        Route::post('/login', [AuthController::class, 'login']);
-    });
+// ── AUTH ORANG TUA (guest only) ──────────────────
+Route::name('web.auth.')->prefix('akun')->middleware('guest')->group(function () {
+    Route::get('/login', [Web\Auth\LoginController::class, 'showLogin'])->name('login');
+    Route::post('/login', [Web\Auth\LoginController::class, 'login']);
+    Route::get('/register', [Web\Auth\RegisterController::class, 'showRegister'])->name('register');
+    Route::post('/register', [Web\Auth\RegisterController::class, 'register']);
+});
 
-    // Auth only
-    Route::middleware('auth')->group(function () {
-        Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-
-        Route::get('/profil-sekolah', [ProfilSekolahController::class, 'edit'])->name('profil-sekolah.edit');
-        Route::put('/profil-sekolah', [ProfilSekolahController::class, 'update'])->name('profil-sekolah.update');
-
-        Route::resource('guru', GuruController::class);
-        Route::resource('siswa', SiswaController::class);
-        Route::resource('berita', BeritaController::class);
-        Route::resource('galeri', GaleriController::class);
-        Route::resource('info-pendaftaran', InfoPendaftaranController::class);
-
-        Route::get('pendaftaran', [PendaftaranController::class, 'index'])->name('pendaftaran.index');
-        Route::get('pendaftaran/{id}', [PendaftaranController::class, 'show'])->name('pendaftaran.show');
-        Route::put('pendaftaran/{id}/status', [PendaftaranController::class, 'updateStatus'])->name('pendaftaran.updateStatus');
-    });
+// ── PROTECTED (wajib login sebagai orangtua) ─────
+Route::name('web.')->middleware(['auth', 'orangtua'])->group(function () {
+    Route::post('/akun/logout', [Web\Auth\LogoutController::class, 'logout'])->name('auth.logout');
+    Route::get('/pendaftaran', [Web\PendaftaranController::class, 'form'])->name('pendaftaran.form');
+    Route::post('/pendaftaran', [Web\PendaftaranController::class, 'store'])->name('pendaftaran.store');
+    Route::get('/pendaftaran/status', [Web\PendaftaranController::class, 'status'])->name('pendaftaran.status');
 });
 ```
 
 ---
 
-## 🎨 DESAIN ADMIN PANEL
+## 🎨 DESAIN WEB PENGUNJUNG
 
-Sesuai mockup Gambar 3.10 proposal:
-- **Warna:** Biru Navy sidebar + putih konten
+Sesuai mockup Gambar 3.11 proposal:
+- **Warna:** Kuning `#FFC107` + Biru Navy `#1E3A5F`
 - **CSS:** Tailwind CSS
-- **Sidebar menu:**
-  - Dashboard
-  - Profil Sekolah
-  - Data Guru
-  - Data Siswa
-  - Berita & Pengumuman
-  - Galeri Foto
-  - Info Pendaftaran
-  - Data Pendaftaran
-  - Logout
-- **Dashboard** menampilkan: Total Guru, Total Siswa, Pendaftaran Masuk, Berita Tayang
+- **Responsive:** Mobile-friendly
+
+### Navbar:
+```
+[Logo SD Warialau]  Beranda | Profil | Guru | Berita | Galeri | Pendaftaran
+                                                    [Login] atau [Nama Orang Tua ▼]
+```
+
+### Tombol Daftar di halaman Info Pendaftaran:
+```
+[Daftar Sekarang]
+→ Jika belum login: redirect ke /akun/login
+→ Jika sudah login sebagai orangtua: redirect ke /pendaftaran
+```
+
+### Halaman Login Orang Tua:
+- Form: Email + Password
+- Link: "Belum punya akun? Daftar di sini"
+- Tombol: "Masuk"
+- Setelah login → redirect ke /pendaftaran
+
+### Halaman Register Orang Tua:
+- Form: Nama Lengkap, Email, No. HP, Password, Konfirmasi Password
+- Role otomatis = 'orangtua'
+- Setelah register → auto login → redirect ke /pendaftaran
 
 ---
 
-## 🔧 CONTOH KODE YANG BENAR
+## 🔒 MIDDLEWARE ORANG TUA
 
 ```php
-// ✅ Controller — hanya terima request & kembalikan view
-class GuruController extends Controller
+// app/Http/Middleware/OrangtuaMiddleware.php
+public function handle(Request $request, Closure $next)
 {
-    public function __construct(private GuruService $guruService) {}
-
-    public function index()
-    {
-        $guru = $this->guruService->getAll();
-        return view('admin.guru.index', compact('guru'));
+    if (auth()->check() && auth()->user()->role === 'orangtua') {
+        return $next($request);
     }
 
-    public function store(GuruRequest $request)
-    {
-        $this->guruService->create($request->validated());
-        return redirect()->route('admin.guru.index')
-            ->with('success', 'Data guru berhasil ditambahkan');
-    }
-}
-
-// ✅ Service — logika bisnis
-class GuruService
-{
-    public function __construct(private GuruRepository $guruRepository) {}
-
-    public function getAll()
-    {
-        return $this->guruRepository->getAll();
+    // Jika admin coba akses halaman orang tua
+    if (auth()->check() && auth()->user()->role === 'admin') {
+        return redirect()->route('admin.dashboard');
     }
 
-    public function create(array $data)
-    {
-        return $this->guruRepository->create($data);
-    }
-}
-
-// ✅ Repository — query database
-class GuruRepository
-{
-    public function getAll()
-    {
-        return Guru::latest()->paginate(10);
-    }
-
-    public function create(array $data)
-    {
-        return Guru::create($data);
-    }
+    return redirect()->route('web.auth.login');
 }
 ```
 
 ---
 
+## 📋 DETAIL HALAMAN
+
+### Beranda (/)
+- Hero: nama sekolah + tagline + foto
+- Statistik: jumlah guru, siswa, tahun berdiri
+- 3 berita terbaru
+- 6 foto galeri terbaru
+- Banner info pendaftaran (jika ada yang aktif)
+
+### Info Pendaftaran (/info-pendaftaran) — A5
+- Tampilan seperti brosur digital
+- Tahun ajaran, tanggal buka-tutup, kuota tersisa
+- Syarat-syarat pendaftaran
+- Tombol **"Daftar Sekarang"** → cek login
+
+### Formulir Pendaftaran (/pendaftaran) — A6 (WAJIB LOGIN)
+- Nama anak, tanggal lahir, jenis kelamin, alamat
+- Nama orang tua, no HP (auto-fill dari akun)
+- Upload dokumen (opsional)
+- Tombol Submit
+- Redirect ke halaman sukses setelah berhasil
+
+### Status Pendaftaran (/pendaftaran/status) — (WAJIB LOGIN)
+- Tampilkan status pendaftaran orang tua yang login
+- Status: Pending (kuning) / Diterima (hijau) / Ditolak (merah)
+- Detail data yang sudah didaftarkan
+
+---
+
 ## ❌ YANG DILARANG
 
-- ❌ Pakai Filament
-- ❌ Query langsung di Controller (`Guru::all()` di controller = SALAH)
-- ❌ Logika bisnis di Controller
-- ❌ Buat fitur di luar proposal (nilai, absensi, SPP, chat, dll)
-- ❌ Mulai kerjakan Web Pengunjung atau API Flutter sebelum Admin selesai
+- ❌ Orang tua bisa akses halaman admin
+- ❌ Admin bisa akses halaman formulir orang tua
+- ❌ Pengunjung tanpa login bisa isi formulir pendaftaran
+- ❌ Fitur di luar proposal (nilai, absensi, SPP, chat)
+- ❌ Query langsung di Controller
+- ❌ Logic bisnis di Controller
 
 ---
 
 ## 📦 PACKAGE
 
 ```bash
+# Sudah ada dari Fase 1:
 composer require laravel/sanctum
 composer require predis/predis
-npm install -D tailwindcss
 ```
 
 ---
@@ -351,4 +330,6 @@ npm install -D tailwindcss
 - Project: `~/project-laravel/we-sd-warialau`
 - Redis aktif di port 6379
 - Reset DB: `php artisan migrate:fresh --seed`
-- Seeder wajib buat 1 akun admin: admin@warialau.sch.id / password
+- Seeder: 1 admin + 1 akun orang tua contoh
+- Admin login di: `/admin/login`
+- Orang tua login di: `/akun/login`
