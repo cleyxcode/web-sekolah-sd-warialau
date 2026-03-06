@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "app": {
+      "type": "stdio",
+      "command": "php",
+      "args": [
+        "artisan",
+        "mcp:start",
+        "app"
+      ],
+      "env": {}
+    }
+  }
+}

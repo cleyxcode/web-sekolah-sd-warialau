@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo mariadb -u root -e \"CREATE DATABASE IF NOT EXISTS warialau CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS ''warialau''@''localhost'' IDENTIFIED BY ''warialau123''; GRANT ALL PRIVILEGES ON warialau.* TO ''warialau''@''localhost''; FLUSH PRIVILEGES;\")",
+      "Bash(mariadb -u code -e \"SELECT 1;\")",
+      "Read(//home/code/.mysql/**)",
+      "Read(//home/code/**)",
+      "Bash(mariadb -u tvriuser -ppasswordku -e \"SHOW DATABASES;\")",
+      "Bash(mariadb -u tvriuser -ppasswordku -e \"CREATE DATABASE IF NOT EXISTS warialau CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\")",
+      "Bash(cp /etc/php/php.ini /tmp/php-warialau.ini)",
+      "Bash(sed -i 's/;extension=pdo_mysql/extension=pdo_mysql/' /tmp/php-warialau.ini)",
+      "Bash(sed -i 's/;extension=mysqli/extension=mysqli/' /tmp/php-warialau.ini)",
+      "Bash(php -c /tmp/php-warialau.ini -m)",
+      "Bash(mariadb --socket=/run/mysqld/mysqld.sock -u root --skip-password -e \"CREATE DATABASE IF NOT EXISTS warialau CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS ''warialau''@''localhost'' IDENTIFIED BY ''warialau123''; GRANT ALL PRIVILEGES ON warialau.* TO ''warialau''@''localhost''; FLUSH PRIVILEGES;\")",
+      "Read(//root/**)",
+      "Bash(php artisan storage:link)",
+      "Bash(npm run build)",
+      "Bash(php artisan route:list --path=admin)"
+    ]
+  }
+}
